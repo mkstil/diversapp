@@ -1,52 +1,62 @@
 from flask import Flask, request, jsonify
-import pyodbc
 from flask_cors import CORS
+import pymssql
+import os
 
 app = Flask(__name__)
-CORS(app)  # للسماح بالطلبات من تطبيق الهاتف
+CORS(app)
 
-# إعداد الاتصال بقاعدة SQL Server
-server =  'SQL5110.site4now.net'  # مثال: 'myserver.database.windows.net'
-database =  'db_ac3d8b_mkstil1'
-username =  'db_ac3d8b_mkstil1_admin'
-password =  'Tijoment24'
-driver = '{ODBC Driver 17 for SQL Server}'
+# Get DB connection info from environment
+DB_SERVER = os.environ.get("DB_SERVER")
+DB_USER = os.environ.get("DB_USER")
+DB_PASSWORD = os.environ.get("DB_PASSWORD")
+DB_NAME = os.environ.get("DB_NAME")
 
-conn_str = f'DRIVER={driver};SERVER={server};DATABASE={database};UID={username};PWD={password}'
+def get_connection():
+    return pymssql.connect(
+        server=DB_SERVER,
+        user=DB_USER,
+        password=DB_PASSWORD,
+        database=DB_NAME
+    )
 
-# دالة لمثال قراءة البيانات
-@app.route('/get_users', methods=['GET'])
+@app.route("/get_users", methods=["GET"])
 def get_users():
     try:
-        conn = pyodbc.connect(conn_str)
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, username, email FROM Users")  # جدول Users كمثال
+        conn = get_connection()
+        cursor = conn.cursor(as_dict=True)
+
+        cursor.execute("SELECT id, username, email FROM Users")
         rows = cursor.fetchall()
-        result = []
-        for row in rows:
-            result.append({"id": row.id, "username": row.username, "email": row.email})
+
         cursor.close()
         conn.close()
-        return jsonify(result)
+
+        return jsonify(rows)
+
     except Exception as e:
         return jsonify({"error": str(e)})
 
-# دالة لمثال إدخال بيانات
-@app.route('/add_user', methods=['POST'])
+@app.route("/add_user", methods=["POST"])
 def add_user():
-    data = request.json
-    username = data.get("username")
-    email = data.get("email")
     try:
-        conn = pyodbc.connect(conn_str)
+        data = request.json
+        username = data.get("username")
+        email = data.get("email")
+
+        conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO Users (username, email) VALUES (?, ?)", (username, email))
+
+        cursor.execute(
+            "INSERT INTO Users (username, email) VALUES (%s, %s)",
+            (username, email)
+        )
+
         conn.commit()
         cursor.close()
         conn.close()
-        return jsonify({"message": "User added successfully"})
+
+        return jsonify({"status": "success"})
+
     except Exception as e:
         return jsonify({"error": str(e)})
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
